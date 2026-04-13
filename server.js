@@ -25,9 +25,11 @@ SERVICES:
 - Monthly maintenance included
 
 PRICING:
-- Starter: $350 setup + $100/month
-- Professional: $500 setup + $150/month
-- Premium: $750 setup + $200/month
+- Starter: $500 Custom Agent Design & Deployment + $1,500/yr maintenance ($125/mo)
+- Professional: $750 Custom Agent Design & Deployment + $1,500/yr maintenance ($125/mo)
+- Premium: $1,000 Custom Agent Design & Deployment + $1,500/yr maintenance ($125/mo)
+
+All plans include the same great ongoing service. The difference is the sophistication of your custom agent at launch. Annual billing only — no monthly payment plans.
 
 RULES:
 - Be enthusiastic but not pushy
