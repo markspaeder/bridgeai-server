@@ -160,7 +160,7 @@ function captureLeadAsync(messages, lastResponse, client) {
     name, phone: phoneMatch ? phoneMatch[0] : 'Not captured',
     project: projectMatch ? projectMatch[1].trim() : 'See conversation',
     timestamp: new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }),
-    snippet: messages.slice(-8).map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n'),
+    snippet: messages.slice(-20).map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n'),
     client
   };
   console.log(`Lead [${client}]:`, lead.name, lead.phone);
