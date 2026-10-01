@@ -98,6 +98,10 @@ RULES:
   pool: `You are the AI assistant for Crystal Clear Pools serving South Florida. Services: weekly/bi-weekly/monthly cleaning, chemical balancing, equipment repair, algae treatment. Competitive rates. Collect name and phone. When collected include [LEAD:collected]. Keep responses friendly and brief.`
 };
 
+// ── Pending lead storage ──────────────────────────────
+const pendingLeads = {};
+const activeTimers = {};
+
 app.post('/chat', async (req, res) => {
   try {
     const { messages, client } = req.body;
