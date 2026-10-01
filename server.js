@@ -119,7 +119,32 @@ app.post('/chat', async (req, res) => {
     if (data.error) return res.status(500).json({ error: data.error.message });
 
     const text = data.content[0].text;
-    if (text.includes('[LEAD:collected]')) captureLeadAsync(messages, text, client);
+    if (text.includes('[LEAD:collected]')) {
+      const sessionKey = (req.ip || 'unknown') + '_' + client;
+      if (activeTimers[sessionKey]) clearTimeout(activeTimers[sessionKey]);
+      pendingLeads[sessionKey] = { messages: [...messages], lastResponse: text, client };
+      activeTimers[sessionKey] = setTimeout(() => {
+        if (pendingLeads[sessionKey]) {
+          captureLeadAsync(pendingLeads[sessionKey].messages, pendingLeads[sessionKey].lastResponse, pendingLeads[sessionKey].client);
+          delete pendingLeads[sessionKey];
+        }
+        delete activeTimers[sessionKey];
+      }, 5 * 60 * 1000);
+    } else {
+      const sessionKey = (req.ip || 'unknown') + '_' + client;
+      if (activeTimers[sessionKey] && pendingLeads[sessionKey]) {
+        pendingLeads[sessionKey].messages = [...messages];
+        pendingLeads[sessionKey].lastResponse = text;
+        clearTimeout(activeTimers[sessionKey]);
+        activeTimers[sessionKey] = setTimeout(() => {
+          if (pendingLeads[sessionKey]) {
+            captureLeadAsync(pendingLeads[sessionKey].messages, pendingLeads[sessionKey].lastResponse, pendingLeads[sessionKey].client);
+            delete pendingLeads[sessionKey];
+          }
+          delete activeTimers[sessionKey];
+        }, 5 * 60 * 1000);
+      }
+    }
     res.json({ text: text.replace('[LEAD:collected]', '').trim() });
 
   } catch (err) {
@@ -206,4 +231,3 @@ async function appendSheet(lead) {
 
 app.get('/', (req, res) => res.json({ status: 'Bridge AI server running', timestamp: new Date().toISOString() }));
 app.listen(PORT, () => console.log(`Bridge AI server running on port ${PORT}`));
-
