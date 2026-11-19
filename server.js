@@ -123,7 +123,7 @@ app.post('/chat', async (req, res) => {
       pendingLeads[sessionKey] = { messages: [...messages], lastResponse: text, client };
       activeTimers[sessionKey] = setTimeout(() => {
         if (pendingLeads[sessionKey]) {
-          captureLeadAsync(pendingLeads[sessionKey].messages, pendingLeads[sessionKey].lastResponse, pendingLeads[sessionKey].client);
+          captureLeadAsync(pendingLeads[sessionKey].messages, pendingLeads[sessionKey].lastResponse, pendingLeads[sessionKey].client).catch(e => console.error("Lead capture failed:", e.message));
           delete pendingLeads[sessionKey];
         }
         delete activeTimers[sessionKey];
@@ -136,7 +136,7 @@ app.post('/chat', async (req, res) => {
         clearTimeout(activeTimers[sessionKey]);
         activeTimers[sessionKey] = setTimeout(() => {
           if (pendingLeads[sessionKey]) {
-            captureLeadAsync(pendingLeads[sessionKey].messages, pendingLeads[sessionKey].lastResponse, pendingLeads[sessionKey].client);
+            captureLeadAsync(pendingLeads[sessionKey].messages, pendingLeads[sessionKey].lastResponse, pendingLeads[sessionKey].client).catch(e => console.error("Lead capture failed:", e.message));
             delete pendingLeads[sessionKey];
           }
           delete activeTimers[sessionKey];
@@ -151,7 +151,32 @@ app.post('/chat', async (req, res) => {
   }
 });
 
-function captureLeadAsync(messages, lastResponse, client) {
+// ── AI lead extraction (reads the whole conversation) ──
+async function extractLeadAI(messages) {
+  try {
+    const apiKey = (process.env.ANTHROPIC_API_KEY || '').trim();
+    const convo = messages.map(m => `${m.role === 'user' ? 'CUSTOMER' : 'AGENT'}: ${m.content}`).join('\n');
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 300,
+        system: 'Extract the CUSTOMER\'s contact details from this conversation. Use only what the customer actually provided. Return ONLY a JSON object: {"name": string|null, "phone": string|null, "email": string|null, "need": string|null}. "name" is the customer\'s own full name, never a word like question or help. "need" is a one-sentence summary of what they want.',
+        messages: [{ role: 'user', content: convo }]
+      })
+    });
+    const data = await r.json();
+    const txt = (data.content && data.content[0] && data.content[0].text) || '';
+    const json = JSON.parse(txt.slice(txt.indexOf('{'), txt.lastIndexOf('}') + 1));
+    return json;
+  } catch (e) {
+    console.error('AI extraction failed:', e.message);
+    return null;
+  }
+}
+
+async function captureLeadAsync(messages, lastResponse, client) {
   const userText = messages.filter(m => m.role === 'user').map(m => m.content).join('\n');
   const assistantText = messages.filter(m => m.role === 'assistant').map(m => m.content).join('\n') + '\n' + lastResponse;
   const phoneMatch = userText.match(/(\(?\d{3}\)?[\s\-.]?\d{3}[\s\-.]?\d{4})/);
@@ -186,6 +211,15 @@ function captureLeadAsync(messages, lastResponse, client) {
     snippet: messages.slice(-20).map(m => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n'),
     client
   };
+  const ai = await extractLeadAI([...messages, { role: 'assistant', content: lastResponse }]);
+  if (ai) {
+    if (ai.name) lead.name = ai.name;
+    if (ai.phone) lead.phone = ai.phone;
+    if (ai.need) lead.project = ai.need;
+    lead.email = ai.email || '';
+  }
+  const bizName = { bridgeai:'Bridge AI', caletri:'Caletri Excavating', hvac:'Fire and Ice', providential:'Wallace Fitness', healthfreedom:'Health Freedom', pool:'Crystal Clear Pools' }[client] || 'Agent';
+  lead.snippet = messages.slice(-20).map(m => `${m.role === 'user' ? (lead.name !== 'Not captured' ? lead.name : 'Customer') : bizName}: ${m.content}`).join('\n\n');
   console.log(`Lead [${client}]:`, lead.name, lead.phone);
   sendEmail(lead).catch(e => console.error('Email failed:', e.message));
   appendSheet(lead).catch(e => console.error('Sheet failed:', e.message));
@@ -203,7 +237,7 @@ async function sendEmail(lead) {
       from: 'Bridge AI <leads@mybridgeai.com>',
       to: recipients,
       subject: `New Lead — ${names[lead.client]||'Bridge AI'}: ${lead.name} | ${lead.phone}`,
-      html: `<div style="font-family:Arial,sans-serif;max-width:600px;"><div style="background:#1A1A3E;padding:20px;border-radius:8px 8px 0 0;"><h2 style="color:#6B8FFF;margin:0;">New Lead — ${names[lead.client]||'Bridge AI'}</h2></div><div style="background:#f9f9f9;padding:24px;border:1px solid #e0e0e0;"><p><b>Name:</b> ${lead.name}</p><p><b>Phone:</b> ${lead.phone}</p><p><b>Project:</b> ${lead.project}</p><p><b>Time:</b> ${lead.timestamp}</p><hr/><pre style="font-size:12px;white-space:pre-wrap;">${lead.snippet}</pre></div><div style="background:#1A1A3E;padding:10px;text-align:center;border-radius:0 0 8px 8px;"><p style="color:#6B8FFF;font-size:11px;margin:0;">Powered by Bridge AI — mybridgeai.com</p></div></div>`
+      html: `<div style="font-family:Arial,sans-serif;max-width:600px;"><div style="background:#1A1A3E;padding:20px;border-radius:8px 8px 0 0;"><h2 style="color:#6B8FFF;margin:0;">New Lead — ${names[lead.client]||'Bridge AI'}</h2></div><div style="background:#f9f9f9;padding:24px;border:1px solid #e0e0e0;"><p><b>Name:</b> ${lead.name}</p><p><b>Phone:</b> ${lead.phone}</p>${lead.email ? `<p><b>Email:</b> ${lead.email}</p>` : ''}<p><b>Need:</b> ${lead.project}</p><p><b>Time:</b> ${lead.timestamp}</p><hr/><pre style="font-size:12px;white-space:pre-wrap;">${lead.snippet}</pre></div><div style="background:#1A1A3E;padding:10px;text-align:center;border-radius:0 0 8px 8px;"><p style="color:#6B8FFF;font-size:11px;margin:0;">Powered by Bridge AI — mybridgeai.com</p></div></div>`
     })
   });
   const result = await r.json();
