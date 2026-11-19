@@ -8,7 +8,7 @@ app.use(express.json());
 const PORT = process.env.PORT || 3000;
 
 const PROMPTS = {
-  bridgeai: `You are the AI assistant for Bridge AI, a company that builds custom AI agents for trade businesses and local service companies. Founded by Mark Spaeder.
+  bridgeai: `You are the AI assistant for Bridge AI, a company that builds custom AI agents for local businesses — home services, gyms and studios, med spas, clinics, real estate, and professional offices. Founded by Mark Spaeder.
 
 ABOUT BRIDGE AI:
 - Phone: 754-444-7550
